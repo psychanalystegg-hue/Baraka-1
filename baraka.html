@@ -443,7 +443,7 @@ function buildInvoices(regions,customers,readings){
     var up=(totC>0&&region.totalBill>615.60)?ceil2p((region.totalBill-615.60)/totC):0;
     g.readings.forEach(function(r){
       var cons=Math.max(0,r.curr-r.prev);
-      var ca=totC>0?ceil2(cons*up):zeroShare(region.totalBill,totC,customers.filter(function(x){return x.regionId===g.regionId;}).length);
+      var ca=totC>0?ceil2(cons*up):zeroShare(region.totalBill,totC,g.readings.length);
       var td=ceil2(ca+region.meterRent+region.meterMaint+region.transformerMaint+region.inspector+(r.customer.debt||0));
       invs.push({id:gid(),customerId:r.customerId,regionId:g.regionId,year:g.year,month:g.month,
         prevReading:r.prev,currReading:r.curr,consumption:cons,unitPrice:up,consumptionAmt:ca,
@@ -525,7 +525,7 @@ function getRegSum(rid,y,m){
   var totC=invs.reduce(function(s,x){return s+(x.consumption||0);},0);
   var bill=getRegionBill(rid,y,m);
   var up=(totC>0&&bill>615.60)?ceil2p((bill-615.60)/totC):0;
-  return{totC:totC,up:up,zShare:zeroShare(bill,totC,custs.length),bill:bill,totDue:invs.reduce(function(s,x){return s+(x.totalDue||0);},0),
+  return{totC:totC,up:up,zShare:zeroShare(bill,totC,invs.length),bill:bill,totDue:invs.reduce(function(s,x){return s+(x.totalDue||0);},0),
     invCount:invs.length,custCount:custs.length,paidCount:invs.filter(function(x){return x.paid;}).length};
 }
 function recalcRegion(regionId,year,month,bill,nR,nI){
@@ -542,7 +542,7 @@ function recalcRegion(regionId,year,month,bill,nR,nI){
     var cust=DB.customers.find(function(x){return x.id===r.customerId;});
     if(!cust)return;
     var cons=Math.max(0,r.curr-r.prev);
-    var ca=totC>0?ceil2(cons*up):zeroShare(bill,totC,custs.length);
+    var ca=totC>0?ceil2(cons*up):zeroShare(bill,totC,allR.length);
     var td=ceil2(ca+region.meterRent+region.meterMaint+region.transformerMaint+region.inspector+(cust.debt||0));
     var ex=result.find(function(x){return x.customerId===r.customerId&&x.year===year&&x.month===month;});
     if(ex){
@@ -1543,7 +1543,7 @@ window.updateMonthlyBill=function(regionId,year,month,amount){
   // تحديث كل الفواتير الموجودة بالسعر الجديد
   var nI=DB.invoices.map(function(inv){
     if(inv.regionId!==regionId||inv.year!==year||inv.month!==month) return inv;
-    var ca=totC>0?ceil2(inv.consumption*up):zeroShare(bill,totC,getCusts(regionId).length);
+    var ca=totC>0?ceil2(inv.consumption*up):zeroShare(bill,totC,allReadings.length>0?allReadings.length:existingInvs.length);
     var td=ceil2(ca+(inv.meterRent||0)+(inv.meterMaint||0)+(inv.inspector||0)
       +(inv.transformerMaint||0)+(inv.bankFees||0)+(inv.subscription||0)
       +(inv.lateFees||0)+(inv.studyFees||0)+(inv.debt||0));
@@ -1551,7 +1551,7 @@ window.updateMonthlyBill=function(regionId,year,month,amount){
   });
 
   persist(_merge(DB,{regionBills:nBills,invoices:nI}));
-  showToast(totC>0?"✅ تم التحديث — سعر الوحدة: "+n2(up)+" درهم/ك":"✅ استهلاك صفري: تم تقسيم (المبلغ − 615.60) بالتساوي = "+n2(zeroShare(bill,totC,getCusts(regionId).length))+" درهم لكل منخرط");
+  showToast(totC>0?"✅ تم التحديث — سعر الوحدة: "+n2(up)+" درهم/ك":"✅ استهلاك صفري: تم تقسيم (المبلغ − 615.60) بالتساوي = "+n2(zeroShare(bill,totC,allReadings.length>0?allReadings.length:existingInvs.length))+" درهم لكل منخرط");
 };
 window.bulkPrint=function(){
   var selR=readState.selR,selY=readState.selY,selM=readState.selM;
@@ -1790,7 +1790,7 @@ window.updateRC=function(){
   var oCons=otherR.reduce(function(s,r){return s+Math.max(0,r.curr-r.prev);},0);
   var totC=oCons+cons;
   var up=(totC>0&&bill>615.60)?ceil2p((bill-615.60)/totC):0;
-  var ca=totC>0?ceil2(cons*up):zeroShare(bill,totC,custs.length);
+  var ca=totC>0?ceil2(cons*up):zeroShare(bill,totC,(otherR.length+1));
   var rent=parseFloat((document.getElementById("rd-rent")||{}).value||0);
   var maint=parseFloat((document.getElementById("rd-maint")||{}).value||0);
   var insp=parseFloat((document.getElementById("rd-insp")||{}).value||0);
@@ -1851,7 +1851,7 @@ window.saveReading=function(cid,rid,y,m){
   allR.forEach(function(r){
     var cust=DB.customers.find(function(x){return x.id===r.customerId;});if(!cust)return;
     var cons=Math.max(0,r.curr-r.prev);
-    var ca=totC>0?ceil2(cons*up):zeroShare(bill,totC,custs.length);
+    var ca=totC>0?ceil2(cons*up):zeroShare(bill,totC,allR.length);
     var isCur=r.customerId===cid;
     var ex=nI.find(function(x){return x.customerId===r.customerId&&x.year===y&&x.month===m;});
     var rRent=isCur?rent:(ex?(ex.meterRent||0):region.meterRent);
@@ -2445,7 +2445,7 @@ function renderSettings(el){
     +'<button class="bp" style="background:#217346" onclick="exportExcel(\'\',\'\',\'\')">📊 Excel — كل البيانات</button>'
     +'</div>'
     +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
-    +'<button class="bg" onclick="document.getElementById(\'import-file\').click()">⬆️ استيراد JSON</button>'
+    +'<button class="bg" onclick="document.getElementById(\'import-file\').click()">⬆️ استيراد JSON (نسخة كاملة أو قراءات)</button>'
     +'<input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(this)"/>'
     +'<button class="br" onclick="resetData()">🗑️ إعادة تعيين كامل</button>'
     +'</div></div>'
@@ -2818,12 +2818,69 @@ window.importData=function(input){
   reader.onload=function(e){
     try{
       var d=JSON.parse(e.target.result);
-      if(!d.regions||!d.customers){showToast("ملف غير صالح","err");return;}
-      persist(d);showToast("✅ تم الاستيراد بنجاح");
+      // 1) نسخة احتياطية كاملة
+      if(d&&!Array.isArray(d)&&d.regions&&d.customers){
+        if(!confirm("هذا ملف نسخة احتياطية كاملة.\nسيتم استبدال كل البيانات الحالية بها.\n\nهل تريد المتابعة؟")){input.value="";return;}
+        persist(d);showToast("✅ تم استيراد النسخة الاحتياطية");input.value="";return;
+      }
+      // 2) قائمة قراءات: [{customerId|meterNo|name, year, month, prev, curr}]
+      var list=Array.isArray(d)?d:(d&&Array.isArray(d.readings)?d.readings:null);
+      if(!list){showToast("ملف غير صالح","err");return;}
+      importReadings(list);
     }catch(err){showToast("خطأ في قراءة الملف","err");}
+    input.value="";
   };
   reader.readAsText(file);
 };
+function rebuildRegionInv(rid,y,m,nR,nI){
+  var region=DB.regions.find(function(x){return x.id===rid;});if(!region)return nI;
+  var custs=getCusts(rid),bill=getRegionBill(rid,y,m);
+  var allR=nR.filter(function(r){return custs.some(function(c){return c.id===r.customerId;})&&r.year===y&&r.month===m;});
+  var totC=allR.reduce(function(s,r){return s+Math.max(0,r.curr-r.prev);},0);
+  var up=(totC>0&&bill>615.60)?ceil2p((bill-615.60)/totC):0;
+  var res=nI.slice();
+  allR.forEach(function(r){
+    var cust=DB.customers.find(function(x){return x.id===r.customerId;});if(!cust)return;
+    var cons=Math.max(0,r.curr-r.prev);
+    var ca=totC>0?ceil2(cons*up):zeroShare(bill,totC,allR.length);
+    var ex=res.find(function(x){return x.customerId===r.customerId&&x.year===y&&x.month===m;});
+    var rRent=ex?(ex.meterRent||0):(cust.defRent||region.meterRent||0);
+    var rMaint=ex?(ex.meterMaint||0):(cust.defMaint||region.meterMaint||0);
+    var rInsp=ex?(ex.inspector||0):(cust.defInsp||region.inspector||0);
+    var rTrans=ex?(ex.transformerMaint||0):(cust.defTrans||region.transformerMaint||0);
+    var rBank=ex?(ex.bankFees||0):0,rSub=ex?(ex.subscription||0):(cust.defSub||0);
+    var rLate=ex?(ex.lateFees||0):0,rStudy=ex?(ex.studyFees||0):0;
+    var rDebt=ex?(ex.debt||0):(cust.debt||0);
+    var td=ceil2(ca+rRent+rMaint+rInsp+rTrans+rBank+rSub+rLate+rStudy+rDebt);
+    var ni={id:ex?ex.id:gid(),customerId:r.customerId,regionId:rid,year:y,month:m,
+      prevReading:r.prev,currReading:r.curr,consumption:cons,unitPrice:up,consumptionAmt:ca,
+      meterRent:rRent,meterMaint:rMaint,transformerMaint:rTrans,inspector:rInsp,
+      bankFees:rBank,subscription:rSub,lateFees:rLate,studyFees:rStudy,debt:rDebt,totalDue:td,
+      paid:ex?ex.paid:false,issuedDate:ex?ex.issuedDate:"",dueDate:ex?ex.dueDate:"",
+      newCheckDate:ex?ex.newCheckDate:"",prevCheckDate:ex?ex.prevCheckDate:""};
+    res=ex?res.map(function(x){return x.id===ex.id?ni:x;}):res.concat([ni]);
+  });
+  return res;
+}
+function importReadings(list){
+  var nR=DB.readings.slice(),touched={},ok=0,bad=[];
+  list.forEach(function(it,i){
+    var c=DB.customers.find(function(x){
+      return (it.customerId&&x.id===it.customerId)||(it.meterNo&&String(x.meterNo)===String(it.meterNo))||(it.name&&x.name===it.name);
+    });
+    var y=parseInt(it.year),m=parseInt(it.month),pv=parseFloat(it.prev),cv=parseFloat(it.curr);
+    if(!c||!y||!m||isNaN(pv)||isNaN(cv)){bad.push(i+1);return;}
+    var rd={customerId:c.id,year:y,month:m,prev:pv,curr:cv};
+    var j=nR.findIndex(function(x){return x.customerId===c.id&&x.year===y&&x.month===m;});
+    if(j>=0)nR[j]=rd;else nR.push(rd);
+    touched[c.regionId+"|"+y+"|"+m]=1;ok++;
+  });
+  if(!ok){showToast("لم يُستورد أي سطر — تحقق من الأسماء/العدادات والأرقام","err");return;}
+  var nI=DB.invoices.slice();
+  Object.keys(touched).forEach(function(k){var p=k.split("|");nI=rebuildRegionInv(p[0],parseInt(p[1]),parseInt(p[2]),nR,nI);});
+  persist(_merge(DB,{readings:nR,invoices:nI}));
+  showToast("✅ تم استيراد "+ok+" قراءة وتحديث الفواتير"+(bad.length?" — تم تجاهل أسطر: "+bad.slice(0,10).join("،"):""),bad.length?"info":undefined);
+}
 window.resetData=function(){
   if(!confirm("تحذير: سيتم حذف كل البيانات. هل أنت متأكد؟"))return;
   localStorage.removeItem(SK);

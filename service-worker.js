@@ -1,7 +1,7 @@
 // نظام البركة — Service Worker
 // ⚠️ عند تحديث index.html، غيّر الرقم بالأسفل (مثلاً v2 → v3)
 // حتى يجبر التطبيق المستخدمين على تحميل النسخة الجديدة بدل النسخة المخزنة مسبقاً.
-var CACHE_NAME = "baraka-cache-v2";
+var CACHE_NAME = "baraka-cache-v3";
 var FILES_TO_CACHE = [
   "./index.html",
   "./manifest.json",
